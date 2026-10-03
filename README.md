@@ -2,20 +2,37 @@
 
 C Language Engine is a reusable browser-based C compiler and execution engine for JavaScript applications. It is designed for integration into a separate IDE, but has no editor, terminal, UI, execution backend, routing or application persistence of its own.
 
-**Status: Phase 2 lifecycle and validation complete in Edge 154; no distributable package or production security claim.** The provisional package name is `@tarun-choudhary/c-language-engine`; it remains private and npm availability and publishing are undecided. JavaScript is the engine implementation language, C is the program language, and the tested target is WebAssembly with WASI Preview 1.
+**Status: Phase 3 verified local distribution candidate; no public release or production security claim.** The provisional package name is `@tarun-choudhary/c-language-engine`; it remains private and npm availability and publishing are undecided. JavaScript is the engine implementation language, C is the program language, and the tested target is WebAssembly with WASI Preview 1.
 
-The engine facade validates projects and owns lifecycle, Worker requests and opaque artifacts. A browser Worker hosts pinned Clang/LLD and a separate disposable Worker runs each linked C program through a WASI Preview 1 shim. `run()` compiles and executes; `compile()` returns an artifact for `execute()`. Phase 2 added [cancel/reset/disposal and concurrency rules](docs/PHASE-2-LIFECYCLE-AND-API.md), [validation and protocol checks](docs/PHASE-2-VALIDATION-AND-PROTOCOL.md), and a [review](docs/PHASE-2-REVIEW.md). The broader architecture remains in [Phase 0 research](docs/PHASE-0-COMPILER-RESEARCH.md) and [architecture](docs/ARCHITECTURE.md).
+The engine facade validates projects and owns lifecycle, Worker requests and opaque artifacts. A browser Worker hosts pinned Clang/LLD and a separate disposable Worker runs each linked C program through a WASI Preview 1 shim. `run()` compiles and executes; `compile()` returns an artifact for `execute()`. Phase 3 stages and hashes [versioned compiler/runtime assets](docs/PHASE-3-ASSET-MANIFEST.md). The existing [cancel/reset/disposal contract](docs/PHASE-2-LIFECYCLE-AND-API.md) and [validation/protocol contract](docs/PHASE-2-VALIDATION-AND-PROTOCOL.md) remain in force. The broader architecture remains in [Phase 0 research](docs/PHASE-0-COMPILER-RESEARCH.md) and [architecture](docs/ARCHITECTURE.md).
 
 ## Reproduce the browser proof
 
 Install Node 24 and Microsoft Edge (or set `C_ENGINE_BROWSER` to a Chromium-compatible browser executable). On Windows, the test defaults to the standard Edge installation path.
 
 ```powershell
-npm ci --ignore-scripts --no-audit --no-fund
+npm ci
+npm run prepare:assets
+npm run verify:assets
 npm run test:browser
+npm run build
+node scripts/verify-assets.mjs --dist
+npm run test:assets
+npm run test:packaging
 ```
 
-The test starts a loopback **static asset** server and a blank browser harness. Compilation and C execution happen in separate browser Workers; the server does not execute C. The test prints detailed JSON and fails on a failed check. The current [Phase 2 test results](docs/PHASE-2-TEST-RESULTS.md) record 50 passing checks in Edge, including the original 26 Phase 1 checks. Importing `src/index.js` from this repository is for local development only; packaging and independent IDE consumption are later work.
+The tests start a loopback **static asset** server and a blank browser harness. Compilation and C execution happen in separate browser Workers; the server does not execute C. `test:browser` prints detailed JSON and fails on a failed check; set `C_ENGINE_TEST_SUMMARY=1` for compact output. The [Phase 3 test results](docs/PHASE-3-TEST-RESULTS.md) record 50 passing regression checks in Edge and Chrome, and a passing Firefox rerun after one intermittent 1,000 ms timeout. Focused integrity and isolated `dist/` consumer checks also passed. The package is still private because the [license audit](docs/PHASE-3-LICENSE-AUDIT.md) has open distribution blockers.
+
+## Phase 3 documents
+
+- [Asset manifest and versions](docs/PHASE-3-ASSET-MANIFEST.md)
+- [Integrity checks and trust limits](docs/PHASE-3-INTEGRITY.md)
+- [Packaging workflow](docs/PHASE-3-PACKAGING.md)
+- [Dependency and license audit](docs/PHASE-3-LICENSE-AUDIT.md)
+- [Browser compatibility](docs/PHASE-3-BROWSER-COMPATIBILITY.md)
+- [Performance baseline](docs/PHASE-3-PERFORMANCE.md)
+- [Actual test results](docs/PHASE-3-TEST-RESULTS.md)
+- [Phase 3 review](docs/PHASE-3-REVIEW.md)
 
 ## Phase 2 documents
 

@@ -5,7 +5,7 @@ const MAX_STDIN_BYTES = 128 * 1024;
 const MAX_WASM_BYTES = 16 * 1024 * 1024;
 const MAX_DIAGNOSTIC_BYTES = 128 * 1024;
 const LIMIT_MAXIMA = Object.freeze({ initializationTimeoutMs: 120_000, compilationTimeoutMs: 30_000, executionTimeoutMs: 15_000, stdoutBytes: 128 * 1024, stderrBytes: 128 * 1024 });
-const WORKER_ERROR_CODES = new Set(["INVALID_REQUEST", "LIMIT_EXCEEDED", "INITIALIZATION_FAILED", "WORKER_FAILED", "PROTOCOL_ERROR"]);
+const WORKER_ERROR_CODES = new Set(["INVALID_REQUEST", "LIMIT_EXCEEDED", "INITIALIZATION_FAILED", "ASSET_ERROR", "WORKER_FAILED", "PROTOCOL_ERROR"]);
 const WORKER_STAGES = new Set(["initialization", "compilation", "runtime-input", "runtime-initialization", "execution", "communication"]);
 
 export class CEngineError extends Error {
@@ -105,7 +105,7 @@ export class CEngine {
 
   constructor(options = {}) {
     if (!record(options) || !onlyKeys(options, ["assetBaseUrl", "limits"])) throw new TypeError("Unsupported engine options");
-    const assetBaseUrl = options.assetBaseUrl === undefined ? new URL("../node_modules/browsercc/dist/", import.meta.url) : options.assetBaseUrl;
+    const assetBaseUrl = options.assetBaseUrl === undefined ? new URL("../runtime/browsercc-0.1.1/", import.meta.url) : options.assetBaseUrl;
     if (!(assetBaseUrl instanceof URL) && typeof assetBaseUrl !== "string") throw new TypeError("assetBaseUrl must be a URL or string");
     const url = new URL(assetBaseUrl, import.meta.url);
     if (!["http:", "https:"].includes(url.protocol) || !url.pathname.endsWith("/")) throw new TypeError("assetBaseUrl must be an HTTP(S) directory URL ending in /");
@@ -237,7 +237,7 @@ export class CEngine {
     const promise = this.#call(worker, "initialize", { assetBaseUrl: this.#assetBaseUrl }, "initializeResult", this.#limits.initializationTimeoutMs)
       .then((result) => {
         if (generation !== this.#generation || this.#state === "disposed") throw new CEngineError(this.#state === "disposed" ? "DISPOSED" : "RESET", "lifecycle", "Initialization was superseded");
-        this.#runtimeInfo = Object.freeze({ engineVersion: "0.0.0-phase2", protocolVersion: 1, ...result, clang: Object.freeze({ ...result.clang }), lld: Object.freeze({ ...result.lld }) });
+        this.#runtimeInfo = Object.freeze({ engineVersion: "0.0.0-phase3", protocolVersion: 1, ...result, clang: Object.freeze({ ...result.clang }), lld: Object.freeze({ ...result.lld }) });
         this.#state = "ready";
       })
       .catch((error) => {
@@ -356,7 +356,7 @@ export class CEngine {
         if (data.kind === "error") {
           if (!record(data.error) || !WORKER_ERROR_CODES.has(data.error.code) || !WORKER_STAGES.has(data.error.stage) || typeof data.error.message !== "string" || data.error.message.length > 4096) return protocolFault("Malformed Worker error");
           const error = new CEngineError(data.error.code, data.error.stage, data.error.message, requestId);
-          settle(reject, error, ["WORKER_FAILED", "PROTOCOL_ERROR"].includes(error.code) || (kind === "initialize" && error.code === "INITIALIZATION_FAILED"));
+          settle(reject, error, ["WORKER_FAILED", "PROTOCOL_ERROR"].includes(error.code) || (kind === "initialize" && ["INITIALIZATION_FAILED", "ASSET_ERROR"].includes(error.code)));
         } else if (data.kind !== expectedKind || !validResult(expectedKind, data.result, payload.limits)) {
           protocolFault("Unexpected or malformed Worker result");
         } else settle(resolve, data.result);

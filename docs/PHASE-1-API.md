@@ -1,5 +1,7 @@
 # Phase 1 API: implemented subset
 
+_Historical Phase 1 record. Phase 3 now uses a versioned `runtime/` asset directory and verifies its files; see [Phase 3 integrity](PHASE-3-INTEGRITY.md). The Phase 1 `node_modules` path below describes the earlier proof only._
+
 This repository-local proof exports `CEngine` and `CEngineError` from `src/index.js`. The [Phase 0 contract](PUBLIC-API.md) remains the target; this page records exactly what Phase 1 implements. Importing by a repository path is for local tests only. The npm package is private and has no distributable entry point yet.
 
 ```js

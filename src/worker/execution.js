@@ -1,4 +1,4 @@
-import { WASI, File, OpenFile, ConsoleStdout } from "../../node_modules/@bjorn3/browser_wasi_shim/dist/index.js";
+import { AssetVerificationError, fetchVerifiedAssets, loadManifest } from "./verify-assets.js";
 
 const OUTPUT_LIMIT = 128 * 1024;
 const INPUT_LIMIT = 128 * 1024;
@@ -50,6 +50,9 @@ self.onmessage = async ({ data }) => {
     if (imports.some((entry) => entry.module !== "wasi_snapshot_preview1" || entry.name.startsWith("sock_"))) throw new TypeError("Unsupported Wasm import");
     if (!WebAssembly.Module.exports(module).some((entry) => entry.name === "_start" && entry.kind === "function")) throw new TypeError("WASI command has no _start export");
     stage = "runtime-initialization";
+    const manifest = await loadManifest();
+    await fetchVerifiedAssets(manifest, "runtime");
+    const { WASI, File, OpenFile, ConsoleStdout } = await import(new URL("../../runtime/browser-wasi-shim-0.4.2/index.js", import.meta.url).href);
     const stdout = outputSink(limits.stdoutBytes);
     const stderr = outputSink(limits.stderrBytes);
     const wasi = new WASI(["program"], [], [
@@ -70,7 +73,7 @@ self.onmessage = async ({ data }) => {
     }
     send({ kind: "executionResult", result: { status: "exited", stdout: stdout.text(), stderr: stderr.text(), exitCode, durationMs: performance.now() - started, error: null, truncated: { stdout: stdout.truncated, stderr: stderr.truncated } } });
   } catch (error) {
-    const code = stage === "runtime-input" ? "INVALID_REQUEST" : stage === "runtime-initialization" ? "INITIALIZATION_FAILED" : "WORKER_FAILED";
+    const code = error instanceof AssetVerificationError ? (error.kind === "integrity" ? "ASSET_ERROR" : "INITIALIZATION_FAILED") : stage === "runtime-input" ? "INVALID_REQUEST" : stage === "runtime-initialization" ? "INITIALIZATION_FAILED" : "WORKER_FAILED";
     send({ kind: "error", error: { code, stage, message: String(error?.message ?? error).slice(0, 4096) } });
   }
 };

@@ -1,10 +1,17 @@
 {
   "name": "@tarun-choudhary/c-language-engine",
-  "version": "0.0.0-phase1",
+  "version": "0.0.0-phase3",
   "private": true,
   "type": "module",
-  "description": "Browser C engine runtime proof of concept",
+  "description": "Standalone browser C compiler and WASI execution engine",
   "scripts": {
+    "prepare:assets": "node scripts/prepare-assets.mjs",
+    "build": "node scripts/prepare-assets.mjs --build",
+    "verify:assets": "node scripts/verify-assets.mjs",
+    "test:packaging": "node scripts/check-determinism.mjs",
+    "test:docs": "node scripts/check-docs.mjs",
+    "test:assets": "node tests/browser/assets.mjs",
+    "measure:browser": "node tests/browser/performance.mjs",
     "test:browser": "node tests/browser/run.mjs",
     "serve": "node scripts/serve.mjs"
   },

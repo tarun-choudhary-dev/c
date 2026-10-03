@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 const root = resolve(fileURLToPath(new URL("../", import.meta.url)));
 const types = { ".js": "text/javascript", ".mjs": "text/javascript", ".wasm": "application/wasm", ".tar": "application/x-tar", ".json": "application/json", ".md": "text/markdown" };
 
-export function startStaticServer(port = 0) {
+export function startStaticServer(port = 0, servingRoot = root, overrides = new Map()) {
+  servingRoot = resolve(servingRoot);
   const server = createServer(async (request, response) => {
     const pathname = new URL(request.url, "http://localhost").pathname;
     if (pathname === "/__harness") {
@@ -15,11 +16,19 @@ export function startStaticServer(port = 0) {
       return;
     }
     if (pathname === "/favicon.ico") { response.writeHead(204).end(); return; }
-    if (!/^\/(src|node_modules)\//.test(pathname)) { response.writeHead(404).end(); return; }
+    if (!/^\/(src|runtime|node_modules)\//.test(pathname) && pathname !== "/asset-manifest.json") { response.writeHead(404).end(); return; }
+    if (overrides.has(pathname)) {
+      const body = overrides.get(pathname);
+      if (body === null) { response.writeHead(404).end(); return; }
+      const extension = pathname.slice(pathname.lastIndexOf("."));
+      response.writeHead(200, { "content-type": types[extension] ?? "application/octet-stream", "cache-control": "no-store" });
+      response.end(body);
+      return;
+    }
     let name;
     try { name = decodeURIComponent(pathname); } catch { response.writeHead(400).end(); return; }
-    const target = resolve(root, "." + name);
-    if (target !== root && !target.startsWith(root + sep)) { response.writeHead(403).end(); return; }
+    const target = resolve(servingRoot, "." + name);
+    if (target !== servingRoot && !target.startsWith(servingRoot + sep)) { response.writeHead(403).end(); return; }
     try {
       if (!(await stat(target)).isFile()) { response.writeHead(404).end(); return; }
       const extension = target.slice(target.lastIndexOf("."));
@@ -36,6 +45,6 @@ export function startStaticServer(port = 0) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { url } = await startStaticServer(Number(process.env.C_ENGINE_PORT ?? 4173));
+  const { url } = await startStaticServer(Number(process.env.C_ENGINE_PORT ?? 4173), process.env.C_ENGINE_SERVE_ROOT ? resolve(process.env.C_ENGINE_SERVE_ROOT) : root);
   process.stdout.write(`Static test server: ${url}\n`);
 }

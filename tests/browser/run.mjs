@@ -1,12 +1,15 @@
-import { chromium } from "playwright-core";
+import { chromium, firefox, webkit } from "playwright-core";
 import { startStaticServer } from "../../scripts/serve.mjs";
 import { runPhase2 } from "./phase2.mjs";
 
-const executablePath = process.env.C_ENGINE_BROWSER ?? "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
+const engineName = process.env.C_ENGINE_BROWSER_ENGINE ?? "chromium";
+const engineType = { chromium, firefox, webkit }[engineName];
+if (!engineType) throw new Error(`Unknown browser engine: ${engineName}`);
+const executablePath = process.env.C_ENGINE_BROWSER ?? (engineName === "chromium" ? "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" : undefined);
 const { server, url } = await startStaticServer();
 let browser;
 try {
-  browser = await chromium.launch({ executablePath, headless: true });
+  browser = await engineType.launch({ ...(executablePath ? { executablePath } : {}), headless: true });
   const page = await browser.newPage();
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -169,7 +172,8 @@ try {
     apiErrors: apiResults.syntax.status === "error" && apiResults.trap.status === "trap" && apiResults.invalidCode === "INVALID_REQUEST" && apiResults.busyCode === "BUSY" && apiResults.disposedCode === "DISPOSED" && apiResults.initializationCode === "INITIALIZATION_FAILED" && apiResults.failedState === "failed",
     ...phase2.checks,
   };
-  process.stdout.write(JSON.stringify({ browserVersion: browser.version(), checks, results, apiResults, phase2: { real: phase2.real, synthetic: phase2.synthetic }, pageErrors }, null, 2) + "\n");
+  const summary = { browserEngine: engineName, browserVersion: browser.version(), passed: Object.values(checks).filter(Boolean).length, total: Object.keys(checks).length, failed: Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name), skipped: 0 };
+  process.stdout.write(JSON.stringify(process.env.C_ENGINE_TEST_SUMMARY === "1" ? summary : { ...summary, checks, results, apiResults, phase2: { real: phase2.real, synthetic: phase2.synthetic }, pageErrors }, null, 2) + "\n");
   if (Object.values(checks).some((passed) => !passed)) process.exitCode = 1;
 } finally {
   await browser?.close();

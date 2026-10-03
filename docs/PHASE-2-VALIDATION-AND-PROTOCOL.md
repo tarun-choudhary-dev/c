@@ -47,4 +47,6 @@ The parent assigns a new request ID to every initialization, compilation and exe
 | `WORKER_FAILED` | Worker startup/uncaught error or internal Worker failure |
 | `PROTOCOL_ERROR` | Malformed, incompatible or uncloneable Worker communication |
 
+_Phase 3 addendum:_ Verified asset size/hash or manifest-schema failures now use `ASSET_ERROR` at `initialization` or `runtime-initialization`; missing asset fetches retain `INITIALIZATION_FAILED` with an asset-specific message. See [integrity contract](PHASE-3-INTEGRITY.md). The Phase 2 table above records the codes present at that phase.
+
 Clang syntax/type errors and LLD link errors remain resolved compilation results with `stage: "compile"` or `"link"` and preserved bounded `rawDiagnostics`; nonzero C exits remain resolved execution results; WebAssembly traps remain resolved `status: "trap"`. Disposal is synchronous resource termination exposed through a resolved promise; ordinary `Worker.terminate()` does not return a cleanup error. A browser process crash may bypass JavaScript cleanup entirely and is outside this contract.

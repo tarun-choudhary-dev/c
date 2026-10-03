@@ -2,6 +2,8 @@
 
 _Implemented and browser-tested on 2026-10-03. This document supersedes the proposed behavior in [Phase 0 lifecycle](LIFECYCLE.md) for the current code; it does not rewrite the Phase 0 or Phase 1 historical records._
 
+_Phase 3 addendum:_ The default compiler asset directory is now `runtime/browsercc-0.1.1/` in the prepared package, and asset failures follow the [Phase 3 integrity contract](PHASE-3-INTEGRITY.md). Lifecycle method signatures and admission rules below are unchanged.
+
 ## States and admission
 
 The public state names remain `created`, `initializing`, `ready`, `busy`, `recovering`, `failed`, and terminal `disposed`. A separate `compiling` or `running` public state was considered but adds no useful admission rule: `busy` covers either operation, while a private active request identifies the Worker role. `resetting` is expressed as `initializing` or `recovering`. `getState()` is synchronous. `isReady()` is true only in `ready`; `isBusy()` is true throughout `busy` and `recovering`. `getRuntimeInfo()` is a frozen snapshot in `ready`/`busy`, otherwise `null`.

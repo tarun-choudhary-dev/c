@@ -1,7 +1,12 @@
-import { Clang, LLD, setUpSysroot } from "../../node_modules/browsercc/dist/index.js";
+import { AssetVerificationError, fetchVerifiedAssets, loadManifest } from "./verify-assets.js";
 
-const defaultAssetBaseUrl = new URL("../../node_modules/browsercc/dist/", import.meta.url);
+const defaultAssetBaseUrl = new URL("../../runtime/browsercc-0.1.1/", import.meta.url);
 let initialization;
+let Clang;
+let LLD;
+let setUpSysroot;
+let clangWasm;
+let lldWasm;
 const DIAGNOSTIC_LIMIT = 128 * 1024;
 const DIAGNOSTIC_COUNT = 200;
 
@@ -9,19 +14,23 @@ function initializeToolchain(assetBaseUrl = defaultAssetBaseUrl) {
   if (initialization) return initialization;
   initialization = (async () => {
     const started = performance.now();
-    const response = await fetch(new URL("sysroot.tar", assetBaseUrl));
-    if (!response.ok) throw new Error(`Sysroot fetch failed (${response.status})`);
-    const sysroot = await response.arrayBuffer();
-    const versionOf = async (factory, program) => {
+    const manifest = await loadManifest();
+    const verified = await fetchVerifiedAssets(manifest, "compiler", assetBaseUrl);
+    const assetVerificationMs = performance.now() - started;
+    ({ Clang, LLD, setUpSysroot } = await import(new URL("index.js", assetBaseUrl).href));
+    clangWasm = verified.get("clang.wasm");
+    lldWasm = verified.get("lld.wasm");
+    const sysroot = verified.get("sysroot.tar").buffer;
+    const versionOf = async (factory, program, wasmBinary) => {
       let output = "";
       const capture = (line) => { output += line + "\n"; };
-      const instance = await factory({ thisProgram: program, print: capture, printErr: capture });
+      const instance = await factory({ thisProgram: program, print: capture, printErr: capture, wasmBinary });
       instance.callMain(["--version"]);
       return { version: output.trim().split("\n")[0], wasmMemoryBytes: instance.HEAPU8?.byteLength ?? null };
     };
-    const clang = await versionOf(Clang, "clang");
-    const lld = await versionOf(LLD, "wasm-ld");
-    return { sysroot, info: { clang, lld, sysrootBytes: sysroot.byteLength, initializationMs: performance.now() - started, target: "wasm32-wasip1" } };
+    const clang = await versionOf(Clang, "clang", clangWasm);
+    const lld = await versionOf(LLD, "wasm-ld", lldWasm);
+    return { sysroot, info: { clang, lld, sysrootBytes: sysroot.byteLength, assetVerificationMs, initializationMs: performance.now() - started, target: "wasm32-wasip1" } };
   })();
   return initialization;
 }
@@ -55,7 +64,7 @@ async function compileC(files, options = {}) {
   };
   const flags = ["-std=c17", "-O0", ...(options.warnings === "all" ? ["-Wall"] : []), "-Wl,--export=main"];
   const { sysroot } = await initializeToolchain();
-  const driver = await Clang({ thisProgram: "clang", printErr });
+  const driver = await Clang({ thisProgram: "clang", printErr, wasmBinary: clangWasm });
   for (const file of files) writeProjectFile(driver, file.path, file.source);
   driver.FS.mkdirTree("/lib/wasm32-wasi");
   driver.FS.mkdirTree("/include/c++/v1");
@@ -81,14 +90,14 @@ async function compileC(files, options = {}) {
   diagnosticsTruncated = false;
   const objects = [];
   for (const frontend of frontends) {
-    const clang = await Clang({ thisProgram: "clang", printErr });
+    const clang = await Clang({ thisProgram: "clang", printErr, wasmBinary: clangWasm });
     for (const file of files) writeProjectFile(clang, file.path, file.source);
     setUpSysroot(clang, sysroot);
     const compileCode = clang.callMain(frontend.args);
     if (compileCode !== 0) return { stage: "compile", transcript, diagnosticsTruncated, wasm: null, linkerArgs: linker.args, targetTriple };
     objects.push({ path: frontend.output, bytes: clang.FS.readFile(frontend.output, { encoding: "binary" }) });
   }
-  const lld = await LLD({ thisProgram: "wasm-ld", printErr });
+  const lld = await LLD({ thisProgram: "wasm-ld", printErr, wasmBinary: lldWasm });
   for (const object of objects) lld.FS.writeFile(object.path, object.bytes);
   setUpSysroot(lld, sysroot);
   const linkCode = lld.callMain(linker.args);
@@ -109,7 +118,7 @@ self.onmessage = async ({ data }) => {
       const { info } = await initializeToolchain(payload?.assetBaseUrl ? new URL(payload.assetBaseUrl) : defaultAssetBaseUrl);
       send({ kind: "initializeResult", result: info });
     } catch (error) {
-      send({ kind: "error", error: { code: "INITIALIZATION_FAILED", stage: "initialization", message: String(error?.message ?? error).slice(0, 4096) } });
+      send({ kind: "error", error: { code: error instanceof AssetVerificationError && error.kind === "integrity" ? "ASSET_ERROR" : "INITIALIZATION_FAILED", stage: "initialization", message: String(error?.message ?? error).slice(0, 4096) } });
     }
     return;
   }
