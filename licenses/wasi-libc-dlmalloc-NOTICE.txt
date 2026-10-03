@@ -1,0 +1,8 @@
+Doug Lea's dlmalloc is released to the public domain under CC0 1.0.
+The authoritative notice is at the start of wasi-libc's dlmalloc/src/malloc.c
+at commit 574b88da481569b65a237cb80daf9a2d5aeaf82d:
+https://github.com/WebAssembly/wasi-libc/blob/574b88da481569b65a237cb80daf9a2d5aeaf82d/dlmalloc/src/malloc.c
+
+The distributed wasi-sdk 25 libc.a contains dlmalloc.o. This notice points
+to the original source statement; it does not replace wasi-libc's other
+license texts or establish a complete archive-member licensing inventory.

@@ -2,7 +2,7 @@
 
 C Language Engine is a reusable browser-based C compiler and execution engine for JavaScript applications. It is designed for integration into a separate IDE, but has no editor, terminal, UI, execution backend, routing or application persistence of its own.
 
-**Status: Phase 3 verified local distribution candidate; no public release or production security claim.** The provisional package name is `@tarun-choudhary/c-language-engine`; it remains private and npm availability and publishing are undecided. JavaScript is the engine implementation language, C is the program language, and the tested target is WebAssembly with WASI Preview 1.
+**Status: Phase 4A investigation partial; private local distribution candidate, no public release or production security claim.** The provisional package name is `@tarun-choudhary/c-language-engine`; it remains private and npm availability and publishing are undecided. JavaScript is the engine implementation language, C is the program language, and the tested target is WebAssembly with WASI Preview 1. The [Phase 4A review](docs/PHASE-4A-REVIEW.md) records the remaining compiler-provenance, notice and licensing blockers.
 
 The engine facade validates projects and owns lifecycle, Worker requests and opaque artifacts. A browser Worker hosts pinned Clang/LLD and a separate disposable Worker runs each linked C program through a WASI Preview 1 shim. `run()` compiles and executes; `compile()` returns an artifact for `execute()`. Phase 3 stages and hashes [versioned compiler/runtime assets](docs/PHASE-3-ASSET-MANIFEST.md). The existing [cancel/reset/disposal contract](docs/PHASE-2-LIFECYCLE-AND-API.md) and [validation/protocol contract](docs/PHASE-2-VALIDATION-AND-PROTOCOL.md) remain in force. The broader architecture remains in [Phase 0 research](docs/PHASE-0-COMPILER-RESEARCH.md) and [architecture](docs/ARCHITECTURE.md).
 
@@ -21,7 +21,16 @@ npm run test:assets
 npm run test:packaging
 ```
 
-The tests start a loopback **static asset** server and a blank browser harness. Compilation and C execution happen in separate browser Workers; the server does not execute C. `test:browser` prints detailed JSON and fails on a failed check; set `C_ENGINE_TEST_SUMMARY=1` for compact output. The [Phase 3 test results](docs/PHASE-3-TEST-RESULTS.md) record 50 passing regression checks in Edge and Chrome, and a passing Firefox rerun after one intermittent 1,000 ms timeout. Focused integrity and isolated `dist/` consumer checks also passed. The package is still private because the [license audit](docs/PHASE-3-LICENSE-AUDIT.md) has open distribution blockers.
+The tests start a loopback **static asset** server and a blank browser harness. Compilation and C execution happen in separate browser Workers; the server does not execute C. `test:browser` prints detailed JSON and fails on a failed check; set `C_ENGINE_TEST_SUMMARY=1` for compact output. The [Phase 4A test results](docs/PHASE-4A-TEST-RESULTS.md) record 50 passing checks in Edge, Chrome, Firefox and Linux WebKit, plus failed investigative runs that remain open reliability risks. Focused integrity and isolated `dist/` consumer checks passed in all four tested browser builds. The [license inventory](docs/PHASE-4A-LICENSE-CLOSURE.md) keeps the candidate private.
+
+## Phase 4A investigation
+
+- [Binary and source provenance](docs/PHASE-4A-PROVENANCE.md)
+- [License and notice mapping](docs/PHASE-4A-LICENSE-CLOSURE.md)
+- [Firefox reliability](docs/PHASE-4A-FIREFOX-INVESTIGATION.md)
+- [WebKit results and setup](docs/PHASE-4A-WEBKIT-RESULTS.md)
+- [Actual test results](docs/PHASE-4A-TEST-RESULTS.md)
+- [Phase 4A review](docs/PHASE-4A-REVIEW.md)
 
 ## Phase 3 documents
 
@@ -67,5 +76,3 @@ The tests start a loopback **static asset** server and a blank browser harness. 
 - [Project structure](docs/PROJECT-STRUCTURE.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Phase 0 review](docs/PHASE-0-REVIEW.md)
-
-The root [LICENSE](LICENSE) records that a project license is pending owner selection. Apache-2.0 is recommended in the distribution plan, but no grant is implied by that recommendation. Third-party licenses must be included with any future runtime assets.

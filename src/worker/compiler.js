@@ -82,7 +82,7 @@ async function compileC(files, options = {}) {
   };
   const frontends = transcript.split("\n").filter((line) => line.includes("-cc1")).map((line) => parseLine(line, "-cc1"));
   const linker = parseLine(transcript.split("\n").find((line) => line.includes("wasm-ld")), "wasm-ld");
-  if (frontends.length !== sourcePaths.length) throw new Error(`Expected ${sourcePaths.length} Clang frontend commands, got ${frontends.length}`);
+  if (frontends.length !== sourcePaths.length) throw new Error(`Expected ${sourcePaths.length} Clang frontend commands, got ${frontends.length}: ${transcript.slice(0, 2048)}`);
   const tripleIndex = frontends[0].args.indexOf("-triple");
   const targetTriple = tripleIndex >= 0 ? frontends[0].args[tripleIndex + 1] : null;
   transcript = "";

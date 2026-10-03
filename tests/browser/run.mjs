@@ -12,8 +12,11 @@ try {
   browser = await engineType.launch({ ...(executablePath ? { executablePath } : {}), headless: true });
   const page = await browser.newPage();
   const pageErrors = [];
+  const consoleErrors = [];
+  const httpErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
-  page.on("console", (message) => { if (message.type() === "error") pageErrors.push(message.text()); });
+  page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
+  page.on("response", (response) => { if (response.status() >= 400) httpErrors.push({ status: response.status(), url: response.url() }); });
   await page.goto(`${url}/__harness`);
   const results = await page.evaluate(async () => {
     const compiler = new Worker("/src/worker/compiler.js", { type: "module" });
@@ -158,7 +161,8 @@ try {
     requestIds: results.hello.compilation.requestId !== results.syntax.requestId && results.unknownMessage.requestId > results.noMain.compilation.requestId,
     unknownMessage: results.unknownMessage.kind === "error" && results.unknownMessage.error.code === "PROTOCOL_ERROR",
     initializationFailure: results.initializationFailure.kind === "error" && results.initializationFailure.error.code === "INITIALIZATION_FAILED",
-    noPageErrors: pageErrors.length === 0,
+    // Two negative initialization cases intentionally request this absent asset.
+    noPageErrors: pageErrors.length === 0 && httpErrors.every(({ status, url }) => status === 404 && new URL(url).pathname === "/missing-assets/index.js") && consoleErrors.length <= httpErrors.length && consoleErrors.every((message) => message === "Failed to load resource: the server responded with a status of 404 (Not Found)"),
     apiLifecycle: apiResults.initialState === "created" && apiResults.readyState === "ready" && apiResults.finalState === "disposed",
     apiCompileExecute: apiResults.compileStatus === "success" && apiResults.first.stdout === "API hello\n" && apiResults.second.stdout === "API hello\n",
     apiRun: apiResults.run.status === "exited" && apiResults.run.execution.exitCode === 9 && !("artifact" in apiResults.run.compilation),
@@ -173,7 +177,7 @@ try {
     ...phase2.checks,
   };
   const summary = { browserEngine: engineName, browserVersion: browser.version(), passed: Object.values(checks).filter(Boolean).length, total: Object.keys(checks).length, failed: Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name), skipped: 0 };
-  process.stdout.write(JSON.stringify(process.env.C_ENGINE_TEST_SUMMARY === "1" ? summary : { ...summary, checks, results, apiResults, phase2: { real: phase2.real, synthetic: phase2.synthetic }, pageErrors }, null, 2) + "\n");
+  process.stdout.write(JSON.stringify(process.env.C_ENGINE_TEST_SUMMARY === "1" ? summary : { ...summary, checks, results, apiResults, phase2: { real: phase2.real, synthetic: phase2.synthetic }, pageErrors, consoleErrors, httpErrors }, null, 2) + "\n");
   if (Object.values(checks).some((passed) => !passed)) process.exitCode = 1;
 } finally {
   await browser?.close();

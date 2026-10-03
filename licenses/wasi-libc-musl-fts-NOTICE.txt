@@ -1,0 +1,7 @@
+The bundled wasi-libc musl-fts copy is BSD-3-Clause with wasi-libc changes.
+See wasi-libc's fts/musl-fts/NOTICE.wasi-libc.md and COPYING at commit
+574b88da481569b65a237cb80daf9a2d5aeaf82d:
+https://github.com/WebAssembly/wasi-libc/blob/574b88da481569b65a237cb80daf9a2d5aeaf82d/fts/musl-fts/NOTICE.wasi-libc.md
+
+The distributed wasi-sdk 25 libc.a contains fts.o. The full BSD-3-Clause
+text is included separately as wasi-libc-musl-fts-COPYING.txt.
