@@ -1,0 +1,23 @@
+# Distribution plan
+
+## Package shape
+
+Publish, if authorized later, an ES module package under the **provisional** name `@tarun-choudhary/c-language-engine`. npm scope ownership, package-name availability and publication are not checked or part of Phase 0. The public export is `CEngine` plus `CEngineError`; an optional TypeScript declaration file can describe the plain JavaScript implementation. Internal Worker entry points and adapters are private package assets, not importable contract paths. No backend is required for compilation or execution.
+
+Keep large Wasm/sysroot files as **static, versioned assets** rather than inlining them into JavaScript. A package release contains or identifies a manifest with immutable filenames, exact byte sizes/hashes, compiler/sysroot/WASI-host version and protocol version. A consumer copies the release asset directory to its own static host (or a dedicated sandbox origin) and passes `assetBaseUrl`. The loader resolves filenames relative to that base and verifies manifest compatibility and integrity. It must not rely on `src/`, `node_modules` filesystem paths, a development server, or a third-party CDN. Browser HTTP caching can reuse hash-named assets. The package may offer a small copy script in a future build, but none is implemented now.
+
+ES modules are the primary format; no UMD/CommonJS promise. Web Worker code is shipped as static module assets and created with URL resolution compatible with common bundlers, subject to Phase 1 validation. Self-hosted assets give the consumer control over availability and CSP. A separate-origin host is required for hardened isolation; the consumer serves a versioned, non-UI frame bootstrap there and supplies `sandboxFrameUrl` plus same-origin `assetBaseUrl`. Document required MIME types for Wasm, JavaScript and manifest; perform browser tests of streaming/fallback loading and CSP. `script-src 'wasm-unsafe-eval'` and suitable `worker-src`/`connect-src` may be required, with exact policy verified per target browser. [Worker URL guidance](https://developer.mozilla.org/en-US/docs/Web/API/Worker/Worker), [Wasm CSP](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/script-src).
+
+## Versioning and compatibility
+
+Package SemVer governs the public JavaScript contract. The asset manifest pins the compiler/LLD/sysroot/WASI host build separately. The engine refuses an incompatible manifest or protocol version with `ASSET_ERROR`/`PROTOCOL_ERROR` instead of attempting a partial load. Runtime info reports the actual versions. Artifacts are never serialized across releases or engine resets. A clean independent consumer project must prove that package and asset copy work without repository-relative assumptions.
+
+## Build and legal obligations
+
+The eventual build process should bundle small JavaScript modules, emit Worker entries, copy only the required C toolchain assets, record source URLs/commit hashes/build flags and content hashes, generate third-party notices, and verify all files in a packed archive. `browsercc` documents 43 MB Clang, 23 MB LLD and 29 MB sysroot **uncompressed**; C++ PCH should not ship in a C-only bundle. Actual transfer size and memory are open measurements. [browsercc package assets](https://github.com/BertalanD/browsercc).
+
+The recommended project license for original code is **Apache-2.0**, subject to owner approval. It aligns with the core LLVM family while remaining compatible in principle with MIT-licensed wrapper/shim code; it does **not** replace third-party licenses. Before publishing, inventory every bundled component (browsercc wrapper, LLVM/Clang/LLD, Emscripten glue, wasi-libc/sysroot, compiler-rt, browser WASI host), include applicable license/NOTICE text and any required source/provenance material, and review the exact distributed assets. TraceCC's AGPL-3.0-only terms would require a separate decision if adopted. The root `LICENSE` is a pending-license notice, not an Apache grant, until the owner chooses. [LLVM license](https://github.com/llvm/llvm-project/blob/main/llvm/LICENSE.TXT), [wasi-libc licenses](https://github.com/WebAssembly/wasi-libc), [browsercc license](https://github.com/BertalanD/browsercc/blob/main/LICENSE), [TraceCC license statement](https://github.com/tracecodeapp/tracecc).
+
+## Integration requirements
+
+The external IDE must supply a static asset URL, call lifecycle methods, render returned text safely (never inject diagnostics as HTML), and decide whether it needs separate-origin hardened deployment. It should handle `CEngineError` codes and program results separately. No IDE-specific state, editor widget, terminal or persistence is packaged.
