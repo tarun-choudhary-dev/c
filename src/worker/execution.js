@@ -4,14 +4,14 @@ const OUTPUT_LIMIT = 128 * 1024;
 const INPUT_LIMIT = 128 * 1024;
 const WASM_LIMIT = 16 * 1024 * 1024;
 
-function outputSink() {
+function outputSink(limit) {
   const chunks = [];
   let length = 0;
   let truncated = false;
   return {
     write(data) {
       const bytes = data instanceof Uint8Array ? data : new TextEncoder().encode(String(data));
-      const retained = bytes.subarray(0, Math.max(0, OUTPUT_LIMIT - length));
+      const retained = bytes.subarray(0, Math.max(0, limit - length));
       if (retained.length) { chunks.push(retained.slice()); length += retained.length; }
       if (retained.length < bytes.length) truncated = true;
     },
@@ -43,13 +43,15 @@ self.onmessage = async ({ data }) => {
     if (!(payload?.wasm instanceof Uint8Array)) throw new TypeError("Expected Wasm bytes");
     if (payload.wasm.byteLength > WASM_LIMIT) throw new TypeError("Wasm artifact exceeds Phase 1 limit");
     if (typeof (payload.stdin ?? "") !== "string" || new TextEncoder().encode(payload.stdin ?? "").length > INPUT_LIMIT) throw new TypeError("Invalid stdin");
+    const limits = payload.limits ?? { stdoutBytes: OUTPUT_LIMIT, stderrBytes: OUTPUT_LIMIT };
+    if (!limits || !Number.isSafeInteger(limits.stdoutBytes) || limits.stdoutBytes < 1 || limits.stdoutBytes > OUTPUT_LIMIT || !Number.isSafeInteger(limits.stderrBytes) || limits.stderrBytes < 1 || limits.stderrBytes > OUTPUT_LIMIT) throw new TypeError("Invalid output limits");
     const module = await WebAssembly.compile(payload.wasm);
     const imports = WebAssembly.Module.imports(module);
     if (imports.some((entry) => entry.module !== "wasi_snapshot_preview1" || entry.name.startsWith("sock_"))) throw new TypeError("Unsupported Wasm import");
     if (!WebAssembly.Module.exports(module).some((entry) => entry.name === "_start" && entry.kind === "function")) throw new TypeError("WASI command has no _start export");
     stage = "runtime-initialization";
-    const stdout = outputSink();
-    const stderr = outputSink();
+    const stdout = outputSink(limits.stdoutBytes);
+    const stderr = outputSink(limits.stderrBytes);
     const wasi = new WASI(["program"], [], [
       new OpenFile(new File(new TextEncoder().encode(payload.stdin ?? ""), { readonly: true })),
       new ConsoleStdout((bytes) => stdout.write(bytes)),
@@ -69,6 +71,6 @@ self.onmessage = async ({ data }) => {
     send({ kind: "executionResult", result: { status: "exited", stdout: stdout.text(), stderr: stderr.text(), exitCode, durationMs: performance.now() - started, error: null, truncated: { stdout: stdout.truncated, stderr: stderr.truncated } } });
   } catch (error) {
     const code = stage === "runtime-input" ? "INVALID_REQUEST" : stage === "runtime-initialization" ? "INITIALIZATION_FAILED" : "WORKER_FAILED";
-    send({ kind: "error", error: { code, stage, message: String(error?.message ?? error) } });
+    send({ kind: "error", error: { code, stage, message: String(error?.message ?? error).slice(0, 4096) } });
   }
 };

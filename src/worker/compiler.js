@@ -2,6 +2,8 @@ import { Clang, LLD, setUpSysroot } from "../../node_modules/browsercc/dist/inde
 
 const defaultAssetBaseUrl = new URL("../../node_modules/browsercc/dist/", import.meta.url);
 let initialization;
+const DIAGNOSTIC_LIMIT = 128 * 1024;
+const DIAGNOSTIC_COUNT = 200;
 
 function initializeToolchain(assetBaseUrl = defaultAssetBaseUrl) {
   if (initialization) return initialization;
@@ -41,7 +43,16 @@ function writeProjectFile(module, path, source) {
 
 async function compileC(files, options = {}) {
   let transcript = "";
-  const printErr = (line) => { transcript += line + "\n"; };
+  let transcriptBytes = 0;
+  let diagnosticsTruncated = false;
+  const decoder = new TextDecoder();
+  const printErr = (line) => {
+    const bytes = new TextEncoder().encode(line + "\n");
+    const available = Math.max(0, DIAGNOSTIC_LIMIT - transcriptBytes);
+    transcript += decoder.decode(bytes.subarray(0, available));
+    transcriptBytes += Math.min(available, bytes.length);
+    if (bytes.length > available) diagnosticsTruncated = true;
+  };
   const flags = ["-std=c17", "-O0", ...(options.warnings === "all" ? ["-Wall"] : []), "-Wl,--export=main"];
   const { sysroot } = await initializeToolchain();
   const driver = await Clang({ thisProgram: "clang", printErr });
@@ -66,21 +77,23 @@ async function compileC(files, options = {}) {
   const tripleIndex = frontends[0].args.indexOf("-triple");
   const targetTriple = tripleIndex >= 0 ? frontends[0].args[tripleIndex + 1] : null;
   transcript = "";
+  transcriptBytes = 0;
+  diagnosticsTruncated = false;
   const objects = [];
   for (const frontend of frontends) {
     const clang = await Clang({ thisProgram: "clang", printErr });
     for (const file of files) writeProjectFile(clang, file.path, file.source);
     setUpSysroot(clang, sysroot);
     const compileCode = clang.callMain(frontend.args);
-    if (compileCode !== 0) return { stage: "compile", transcript, wasm: null, linkerArgs: linker.args, targetTriple };
+    if (compileCode !== 0) return { stage: "compile", transcript, diagnosticsTruncated, wasm: null, linkerArgs: linker.args, targetTriple };
     objects.push({ path: frontend.output, bytes: clang.FS.readFile(frontend.output, { encoding: "binary" }) });
   }
   const lld = await LLD({ thisProgram: "wasm-ld", printErr });
   for (const object of objects) lld.FS.writeFile(object.path, object.bytes);
   setUpSysroot(lld, sysroot);
   const linkCode = lld.callMain(linker.args);
-  if (linkCode !== 0) return { stage: "link", transcript, wasm: null, linkerArgs: linker.args, targetTriple };
-  return { stage: "complete", transcript, wasm: lld.FS.readFile(linker.output, { encoding: "binary" }), linkerArgs: linker.args, targetTriple };
+  if (linkCode !== 0) return { stage: "link", transcript, diagnosticsTruncated, wasm: null, linkerArgs: linker.args, targetTriple };
+  return { stage: "complete", transcript, diagnosticsTruncated, wasm: lld.FS.readFile(linker.output, { encoding: "binary" }), linkerArgs: linker.args, targetTriple };
 }
 
 self.onmessage = async ({ data }) => {
@@ -96,7 +109,7 @@ self.onmessage = async ({ data }) => {
       const { info } = await initializeToolchain(payload?.assetBaseUrl ? new URL(payload.assetBaseUrl) : defaultAssetBaseUrl);
       send({ kind: "initializeResult", result: info });
     } catch (error) {
-      send({ kind: "error", error: { code: "INITIALIZATION_FAILED", stage: "initialization", message: String(error?.message ?? error) } });
+      send({ kind: "error", error: { code: "INITIALIZATION_FAILED", stage: "initialization", message: String(error?.message ?? error).slice(0, 4096) } });
     }
     return;
   }
@@ -107,14 +120,15 @@ self.onmessage = async ({ data }) => {
   try {
     const files = payload.files ?? [{ path: payload.filename, source: payload.source }];
     const started = performance.now();
-    const { transcript, wasm, stage, linkerArgs, targetTriple } = await compileC(files, payload.options);
+    const { transcript, diagnosticsTruncated, wasm, stage, linkerArgs, targetTriple } = await compileC(files, payload.options);
     const module = wasm ? await WebAssembly.compile(wasm) : null;
+    const diagnostics = diagnosticRecords(transcript, stage);
     const result = {
       status: module ? "success" : "error",
       stage,
-      diagnostics: diagnosticRecords(transcript, stage),
+      diagnostics: diagnostics.slice(0, DIAGNOSTIC_COUNT),
       rawDiagnostics: transcript,
-      diagnosticsTruncated: false,
+      diagnosticsTruncated: diagnosticsTruncated || diagnostics.length > DIAGNOSTIC_COUNT,
       durationMs: performance.now() - started,
       wasm,
       imports: module ? WebAssembly.Module.imports(module) : null,
@@ -124,6 +138,6 @@ self.onmessage = async ({ data }) => {
     };
     send({ kind: "compileResult", result }, wasm ? [wasm.buffer] : []);
   } catch (error) {
-    send({ kind: "error", error: { code: "WORKER_FAILED", stage: "compilation", message: String(error?.message ?? error) } });
+    send({ kind: "error", error: { code: "WORKER_FAILED", stage: "compilation", message: String(error?.message ?? error).slice(0, 4096) } });
   }
 };

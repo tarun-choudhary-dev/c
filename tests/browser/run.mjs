@@ -1,5 +1,6 @@
 import { chromium } from "playwright-core";
 import { startStaticServer } from "../../scripts/serve.mjs";
+import { runPhase2 } from "./phase2.mjs";
 
 const executablePath = process.env.C_ENGINE_BROWSER ?? "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
 const { server, url } = await startStaticServer();
@@ -138,6 +139,7 @@ try {
     await timed.dispose();
     return { initialState, readyState, info, compileStatus: compilation.status, first, second, run, multiApi: { status: multiApi.status, exitCode: multiApi.execution?.exitCode }, warning: { status: warning.status, diagnostics: warning.diagnostics, rawDiagnostics: warning.rawDiagnostics }, runError: { status: runError.status, compilationStatus: runError.compilation.status, execution: runError.execution }, input: input.execution, flood: { status: flood.status, stdoutLength: flood.execution?.stdout.length, truncated: flood.execution?.truncated }, filesystem: filesystem.execution, syntax: { status: syntax.status, stage: syntax.stage, diagnostics: syntax.diagnostics }, trap, invalidCode, busyCode, disposedCode, initializationCode, failedState, finalState: engine.getState(), timeoutCode, mainThreadTicks, postTimeout: postTimeout.execution };
   });
+  const phase2 = await runPhase2(page);
   const checks = {
     toolchain: results.toolchain.kind === "initializeResult" && results.toolchain.result.target === "wasm32-wasip1",
     hello: results.hello.compilation.result?.status === "success" && results.hello.compilation.result?.targetTriple === "wasm32-unknown-wasi" && results.hello.compilation.result?.wasmMagic?.join(",") === "0,97,115,109" && results.hello.execution?.result?.stdout === "Hello from C\n" && results.hello.execution?.result?.exitCode === 0,
@@ -165,8 +167,9 @@ try {
     apiNoFilesystem: apiResults.filesystem.exitCode === 0,
     apiTimeoutRecovery: apiResults.timeoutCode === "TIMEOUT" && apiResults.mainThreadTicks > 0 && apiResults.postTimeout.exitCode === 0,
     apiErrors: apiResults.syntax.status === "error" && apiResults.trap.status === "trap" && apiResults.invalidCode === "INVALID_REQUEST" && apiResults.busyCode === "BUSY" && apiResults.disposedCode === "DISPOSED" && apiResults.initializationCode === "INITIALIZATION_FAILED" && apiResults.failedState === "failed",
+    ...phase2.checks,
   };
-  process.stdout.write(JSON.stringify({ browserVersion: browser.version(), checks, results, apiResults, pageErrors }, null, 2) + "\n");
+  process.stdout.write(JSON.stringify({ browserVersion: browser.version(), checks, results, apiResults, phase2: { real: phase2.real, synthetic: phase2.synthetic }, pageErrors }, null, 2) + "\n");
   if (Object.values(checks).some((passed) => !passed)) process.exitCode = 1;
 } finally {
   await browser?.close();
